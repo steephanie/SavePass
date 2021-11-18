@@ -1,116 +1,107 @@
-import React from 'react';
-import { useNavigation } from '@react-navigation/native';
-import { Alert, KeyboardAvoidingView, Platform } from 'react-native';
-import { useForm } from 'react-hook-form';
-import { RFValue } from 'react-native-responsive-fontsize';
-import * as Yup from 'yup';
-import { yupResolver } from '@hookform/resolvers/yup';
+import React, { useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import uuid from 'react-native-uuid';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { Header } from '../../components/Header';
-import { Input } from '../../components/Form/Input';
-import { Button } from '../../components/Form/Button';
-import { LoginDataProps } from '../Home';
+import { SearchBar } from '../../components/SearchBar';
+import { LoginDataItem } from '../../components/LoginDataItem';
 
 import {
   Container,
-  Form
+  Metadata,
+  Title,
+  TotalPassCount,
+  LoginList,
 } from './styles';
 
-interface FormData {
+interface LoginDataProps {
+  id: string;
   service_name: string;
   email: string;
   password: string;
 }
 
-const schema = Yup.object().shape({
-  service_name: Yup.string().required('Nome do serviço é obrigatório!'),
-  email: Yup.string().email('Não é um email válido').required('Email é obrigatório!'),
-  password: Yup.string().required('Senha é obrigatória!'),
-})
+type LoginListDataProps = LoginDataProps[];
 
-export function RegisterLoginData() {
-  const { navigate } = useNavigation();
-  const {
-    control,
-    handleSubmit,
-    formState: {
-      errors
-    }
-  } = useForm({
-    resolver: yupResolver(schema)
-  });
+export function Home() {
+  const [searchText, setSearchText] = useState('');
+  const [searchListData, setSearchListData] = useState<LoginListDataProps>([]);
+  const [data, setData] = useState<LoginListDataProps>([]);
 
-  async function handleRegister(formData: FormData) {
-    
+  async function loadData() {
     const dataKey = '@savepass:logins';
-    const response = await AsyncStorage.getItem(dataKey);
-    let listLogins = JSON.parse(response) || [];
- 
-    const newLoginData = {
-      id: String(uuid.v4()),
-      ...formData
-    }
+    // Get asyncStorage data, use setSearchListData and setData
+    const asyncStorageData = await AsyncStorage.getItem(dataKey);
+    const passwords = asyncStorageData ? JSON.parse(asyncStorageData) : [];
 
-    const newLoginListData = [...listLogins, newLoginData];
-    await AsyncStorage.setItem(dataKey, JSON.stringify(newLoginListData));
-
-    navigate('Home');
+    setData(passwords);
+    setSearchListData(passwords);
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      enabled
-    >
-      <Header />
-      <Container>
-        <Form>
-          <Input
-            testID="service-name-input"
-            title="Nome do serviço"
-            name="service_name"
-            error={
-              errors.service_name && errors.service_name.message
-            }
-            control={control}
-            autoCapitalize="sentences"
-            autoCorrect
-          />
-          <Input
-            testID="email-input"
-            title="E-mail"
-            name="email"
-            error={
-              errors.email && errors.email.message
-            }
-            control={control}
-            autoCorrect={false}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <Input
-            testID="password-input"
-            title="Senha"
-            name="password"
-            error={
-              errors.password && errors.password.message
-            }
-            control={control}
-            secureTextEntry
-          />
+  function handleFilterLoginData() {
+    // Filter results inside data, save with setSearchListData
+    if (searchText !== '') {
+      const allData = searchListData;
+      const filteredData = allData.filter(item =>
+        item.service_name.toLowerCase().includes(searchText.toLowerCase()));
+      setSearchListData(filteredData);
+    }
+  }
 
-          <Button
-            style={{
-              marginTop: RFValue(8)
-            }}
-            title="Salvar"
-            onPress={handleSubmit(handleRegister)}
-          />
-        </Form>
+  function handleChangeInputText(text: string) {
+    // Update searchText value
+    if (text !== '') {
+      setSearchText(text);
+    } else {
+      setSearchListData(data);
+      setSearchText('');
+    }
+  }
+
+  useFocusEffect(useCallback(() => {
+    loadData();
+  }, []));
+
+  return (
+    <>
+      <Header
+        user={{
+          name: 'Rocketseat',
+          avatar_url: 'https://i.ibb.co/ZmFHZDM/rocketseat.jpg'
+        }}
+      />
+      <Container>
+        <SearchBar
+          placeholder="Qual senha você procura?"
+          onChangeText={handleChangeInputText}
+          value={searchText}
+          returnKeyType="search"
+          onSubmitEditing={handleFilterLoginData}
+          onSearchButtonPress={handleFilterLoginData}
+        />
+
+        <Metadata>
+          <Title>Suas senhas</Title>
+          <TotalPassCount>
+            {searchListData.length
+              ? `${`${searchListData.length}`.padStart(2, '0')} ao total`
+              : 'Nada a ser exibido'
+            }
+          </TotalPassCount>
+        </Metadata>
+
+        <LoginList
+          keyExtractor={(item) => item.id}
+          data={searchListData}
+          renderItem={({ item: loginData }) => {
+            return <LoginDataItem
+              service_name={loginData.service_name}
+              email={loginData.email}
+              password={loginData.password}
+            />
+          }}
+        />
       </Container>
-    </KeyboardAvoidingView>
+    </>
   )
 }
